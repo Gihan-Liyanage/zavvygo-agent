@@ -105,6 +105,19 @@ def planner_tool(requirements: Dict[str, Any]) -> Dict[str, Any]:
 
     return itinerary
 
+# -----------------------------
+# Node: Handle Trip Planning
+# -----------------------------
+def handle_plan(state: ZavvyState) -> ZavvyState:
+    params = state["intent_data"].get("params", {})
+    itinerary = planner_tool(params)
+
+    state["result"] = {
+        "type": "plan_result",
+        "plan": itinerary
+    }
+    return state
+
 
 # -----------------------------
 # Node: Classify Intent
