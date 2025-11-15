@@ -72,4 +72,4 @@ if st.button("Send"):
                 text = parsed.get("answer", str(parsed))
         st.session_state.messages.append({"role": "assistant", "text": text})
         # rerun to show new messages and clear input
-        st.experimental_rerun()
+        st.rerun()
