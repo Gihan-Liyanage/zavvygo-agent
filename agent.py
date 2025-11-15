@@ -36,7 +36,6 @@ class ZavvyState(TypedDict):
 # Helper: Extract JSON safely
 # -----------------------------
 def extract_json(text: str) -> dict:
-    """Extract JSON object from a string."""
     try:
         json_str = re.search(r"\{.*\}", text, re.DOTALL).group(0)
         return json.loads(json_str)
@@ -48,9 +47,6 @@ def extract_json(text: str) -> dict:
 # Tool: Tavily Web Search
 # -----------------------------
 def web_search_tool(query: str) -> Dict[str, Any]:
-    """
-    Performs a Tavily web search and returns structured results.
-    """
     response = tavily_client.search(query=query, max_results=5)
     results = response.get("results", [])
     summary = response.get("answer", "No summary found.")
@@ -61,28 +57,27 @@ def web_search_tool(query: str) -> Dict[str, Any]:
 # Tool: Trip Planner
 # -----------------------------
 def planner_tool(requirements: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Generates a JSON itinerary for a Sri Lanka trip based on requirements.
-    """
-    llm = ChatOpenAI(api_key=OPENAI_API_KEY, temperature=0.3, model="gpt-4o-mini")
+    llm = ChatOpenAI(api_key=OPENAI_API_KEY, temperature=0.4, model="gpt-4o-mini")
 
     days = int(requirements.get("days", 3))
     theme = requirements.get("theme", "beaches")
     preferences = requirements.get("preferences", [])
 
     system_prompt = (
-        "You are Zavvy Planner, a travel itinerary expert specialized in Sri Lanka. "
-        "Create detailed travel plans **only within Sri Lanka**."
+        "You are Zavvy Planner, a friendly Sri Lankan travel expert. "
+        "Your tone is warm, helpful, and conversational—like a local friend giving advice. "
+        "Keep things informative but easy to read. "
+        "Always stay within Sri Lanka."
     )
 
     user_prompt = (
-        f"User wants a {days}-day trip in Sri Lanka focused on {theme}. "
-        f"Preferences: {preferences}. "
-        "Create a structured JSON itinerary with these keys:\n"
-        "- trip_overview\n"
-        "- days (list of Day, Activities, Hotel, Tips)\n"
-        "- hotel_suggestions (list of hotels with short descriptions)\n"
-        "Return only valid JSON."
+        f"Create a friendly, detailed {days}-day trip itinerary in Sri Lanka around the theme '{theme}'.\n"
+        f"User preferences: {preferences}.\n\n"
+        "Return JSON with:\n"
+        "- trip_overview (friendly tone)\n"
+        "- days (each day: day, activities, hotel, tips)\n"
+        "- hotel_suggestions (3–6 hotels)\n"
+        "Return only JSON."
     )
 
     response = llm.invoke(
@@ -99,8 +94,9 @@ def planner_tool(requirements: Dict[str, Any]) -> Dict[str, Any]:
             "days": [
                 {
                     "day": i + 1,
-                    "activities": "Could not parse full details.",
+                    "activities": "Could not parse.",
                     "hotel": "N/A",
+                    "tips": ""
                 }
                 for i in range(days)
             ],
@@ -118,21 +114,16 @@ def classify_intent(state: ZavvyState) -> ZavvyState:
 
     user_input = state["user_input"].strip().lower()
 
-    # Handle self-introduction queries directly
-    if any(
-        kw in user_input
-        for kw in ["who are you", "your name", "what can you do", "introduce yourself"]
-    ):
+    if any(q in user_input for q in ["who are you", "your name", "introduce yourself"]):
         state["intent_data"] = {"intent": "self", "query": user_input}
         return state
 
     decision_prompt = (
-        "You are Zavvy, a travel assistant specialized in **Sri Lanka tourism**.\n"
-        "Classify the user's request as:\n"
-        "1. 'plan' - if they want a trip plan, itinerary, or multi-day suggestion.\n"
-        "2. 'info' - if they just want factual travel info.\n\n"
-        "Return JSON like {\"intent\": \"plan\", \"params\": {...}} or "
-        "{\"intent\": \"info\", \"query\": \"...\"}.\n\n"
+        "You are Zavvy, a friendly Sri Lanka travel buddy. "
+        "Classify user intent.\n\n"
+        "Return JSON:\n"
+        "- {\"intent\": \"plan\", \"params\": {...}}\n"
+        "- {\"intent\": \"info\", \"query\": \"...\"}\n\n"
         f"User: {state['user_input']}"
     )
 
@@ -154,17 +145,19 @@ def classify_intent(state: ZavvyState) -> ZavvyState:
 # Node: Handle Info Queries
 # -----------------------------
 def handle_info(state: ZavvyState) -> ZavvyState:
-    llm = ChatOpenAI(api_key=OPENAI_API_KEY, temperature=0.2, model="gpt-4o-mini")
+    llm = ChatOpenAI(api_key=OPENAI_API_KEY, temperature=0.5, model="gpt-4o-mini")
 
     query = state["intent_data"].get("query", state["user_input"])
     search_data = web_search_tool(f"{query} Sri Lanka tourism")
 
+    # ✨ FRIENDLY TONE UPDATE
     answer_prompt = (
-        "You are Zavvy, a Sri Lanka travel expert. "
-        "Summarize the following Tavily search results into a short, factual, Sri Lanka-specific answer. "
-        "Answer in 3–6 sentences and cite sources as [1], [2], etc.\n\n"
-        f"Summary: {search_data['summary']}\n\n"
-        f"Results: {json.dumps(search_data['results'], indent=2)}"
+        "You are Zavvy, a warm, friendly Sri Lankan travel guide. "
+        "Use the Tavily results to craft an approachable, natural explanation (5–8 sentences). "
+        "Speak like a local friend who knows the country well. "
+        "Do NOT sound like a search engine. No citations. No robotic tone.\n\n"
+        f"Tavily summary: {search_data['summary']}\n\n"
+        f"Tavily results: {json.dumps(search_data['results'], indent=2)}"
     )
 
     response = llm.invoke([{"role": "user", "content": answer_prompt}])
@@ -172,18 +165,7 @@ def handle_info(state: ZavvyState) -> ZavvyState:
     state["result"] = {
         "type": "info",
         "answer": response.content.strip(),
-        "sources": search_data["results"],
     }
-    return state
-
-
-# -----------------------------
-# Node: Handle Trip Planning
-# -----------------------------
-def handle_plan(state: ZavvyState) -> ZavvyState:
-    params = state["intent_data"].get("params", {})
-    itinerary = planner_tool(params)
-    state["result"] = {"type": "plan_result", "plan": itinerary}
     return state
 
 
@@ -194,24 +176,19 @@ def handle_self(state: ZavvyState) -> ZavvyState:
     state["result"] = {
         "type": "info",
         "answer": (
-            "I'm **Zavvy**, your Sri Lanka travel companion 🇱🇰. "
-            "I can answer questions about destinations, beaches, heritage sites, wildlife, and culture — "
-            "and help you plan beautiful trips across Sri Lanka!"
-        ),
+            "I'm Zavvy — your friendly Sri Lankan travel buddy 🇱🇰. "
+            "Ask me anything about beaches, adventures, culture, food, or even help planning a full trip!"
+        )
     }
     return state
 
 
 # -----------------------------
-# Router Function
+# Router
 # -----------------------------
 def router(state: ZavvyState) -> str:
     intent = state["intent_data"].get("intent", "info")
-    if intent == "plan":
-        return "plan"
-    elif intent == "self":
-        return "self"
-    return "info"
+    return intent
 
 
 # -----------------------------
@@ -226,7 +203,9 @@ def build_zavvy_agent():
     graph.add_node("self", handle_self)
 
     graph.add_conditional_edges(
-        "classify_intent", router, {"plan": "plan", "info": "info", "self": "self"}
+        "classify_intent",
+        router,
+        {"plan": "plan", "info": "info", "self": "self"},
     )
 
     graph.add_edge("info", END)

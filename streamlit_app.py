@@ -1,4 +1,3 @@
-# streamlit_app.py
 import streamlit as st
 import json
 from agent import build_zavvy_agent
@@ -10,7 +9,6 @@ zavvy_handler, planner_tool = build_zavvy_agent()
 st.title("🐢 Zavvy — Your Sri Lanka Travel Companion 🇱🇰")
 st.caption("Ask Zavvy about destinations, beaches, cultural sites, or ask to plan a Sri Lankan trip!")
 
-# Sidebar: Trip planning form
 with st.sidebar.form("trip_form"):
     st.header("✈️ Plan a Trip")
     days = st.number_input("Duration (days)", min_value=1, max_value=14, value=3)
@@ -25,7 +23,6 @@ if submit_plan:
     st.subheader("🗓️ Your Itinerary")
     st.json(plan)
 
-# Chat area
 st.subheader("💬 Chat with Zavvy")
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -34,13 +31,14 @@ for msg in st.session_state.messages:
     role = "🧑‍💼 You" if msg["role"] == "user" else "🤖 Zavvy"
     st.markdown(f"**{role}:** {msg['text']}")
 
-user_input = st.text_input("Type your question (e.g., 'Best surfing beaches in Sri Lanka?')", key="chat_input")
+user_input = st.text_input("Type your question…", key="chat_input")
 
 if st.button("Send"):
     if user_input.strip():
         st.session_state.messages.append({"role": "user", "text": user_input})
         with st.spinner("Zavvy is thinking..."):
             response = zavvy_handler(user_input)
+
         try:
             parsed = json.loads(response)
             if parsed.get("type") == "info":
@@ -51,5 +49,6 @@ if st.button("Send"):
                 text = response
         except Exception:
             text = response
+
         st.session_state.messages.append({"role": "assistant", "text": text})
         st.rerun()
